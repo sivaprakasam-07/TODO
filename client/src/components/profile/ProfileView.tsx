@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { useTasks } from '../../context/TaskContext';
+import { useUI } from '../../context/UIContext';
 import { useToast } from '../../context/ToastContext';
 import { EditProfileModal } from './EditProfileModal';
 import {
@@ -18,12 +19,14 @@ import {
   AlertTriangle,
   Loader2,
   X,
+  Smartphone,
 } from 'lucide-react';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 export const ProfileView: React.FC = () => {
   const { user: authUser, signOutUser } = useAuth();
   const { tasks, tasksByStatus, clearAllTasks } = useTasks();
+  const { isInstallable, triggerInstall } = useUI();
   const { showToast } = useToast();
   const prefersReduced = useReducedMotion();
 
@@ -213,6 +216,17 @@ export const ProfileView: React.FC = () => {
               <Download className="w-3.5 h-3.5 text-[#8A8A8A]" />
               Export JSON Backup
             </button>
+
+            {isInstallable && (
+              <button
+                type="button"
+                onClick={triggerInstall}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#D1D1D1] hover:text-white bg-[#141414] hover:bg-[#1E1E1E] border border-[#282828] rounded-lg transition-colors cursor-pointer"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-[#8A8A8A]" />
+                Install App (PWA)
+              </button>
+            )}
           </div>
         </div>
       </div>

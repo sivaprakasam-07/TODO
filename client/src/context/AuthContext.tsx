@@ -42,7 +42,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       },
       (error) => {
         console.error('[AuthContext] Auth state change error:', error);
-        setAuthError(error.message);
+        setAuthError('Authentication session error. Please sign in again.');
         setLoading(false);
       }
     );
@@ -63,11 +63,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const error = err as Error & { code?: string };
       console.error('[AuthContext] Google sign-in failed:', error);
       if (error.code === 'auth/popup-closed-by-user') {
-        setAuthError('Sign-in popup was closed before completing.');
+        setAuthError('Sign-in was cancelled.');
+      } else if (error.code === 'auth/popup-blocked') {
+        setAuthError('Sign-in popup was blocked. Please allow popups for FocusFlow.');
       } else if (error.code === 'auth/cancelled-popup-request') {
         setAuthError('Sign-in request was cancelled.');
+      } else if (error.code === 'auth/network-request-failed') {
+        setAuthError('Network connection issue. Please check your internet connection.');
+      } else if (error.code === 'auth/unauthorized-domain') {
+        setAuthError('This domain is not authorized in your Firebase console.');
       } else {
-        setAuthError(error.message || 'Failed to sign in with Google.');
+        setAuthError('Unable to sign in with Google. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -81,9 +87,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await firebaseSignOutUser();
       setUser(null);
     } catch (err: unknown) {
-      const error = err as Error;
-      console.error('[AuthContext] Sign-out failed:', error);
-      setAuthError(error.message || 'Failed to sign out.');
+      console.error('[AuthContext] Sign-out failed:', err);
+      setAuthError('Failed to sign out. Please try again.');
     } finally {
       setLoading(false);
     }

@@ -20,13 +20,16 @@ import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 interface TaskCardProps {
   task: Task;
+  index?: number;
+  onDropOnTask?: (draggedTaskId: string, targetTaskId: string) => void;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, onDropOnTask }) => {
   const { setSelectedTaskId } = useUI();
   const { user } = useTasks();
   const { user: authUser } = useAuth();
   const [isDragging, setIsDragging] = useState(false);
+  const [isOverCard, setIsOverCard] = useState(false);
   const prefersReduced = useReducedMotion();
 
   const isCompleted = task.status === 'completed';
@@ -53,6 +56,29 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
     setIsDragging(false);
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    if (!isOverCard) setIsOverCard(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOverCard(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOverCard(false);
+    const draggedId = e.dataTransfer.getData('text/plain');
+    if (draggedId && onDropOnTask) {
+      onDropOnTask(draggedId, task.id);
+    }
+  };
+
   const tagColors = ['bg-rose-500', 'bg-sky-500', 'bg-amber-500', 'bg-emerald-500', 'bg-purple-500'];
   const creatorName = task.createdBy || authUser?.displayName || user.name || 'User';
   const creatorInitial = creatorName.charAt(0).toUpperCase() || 'S';
@@ -74,10 +100,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
         draggable
         onDragStart={handleNativeDragStart}
         onDragEnd={handleNativeDragEnd}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         onClick={() => setSelectedTaskId(task.id)}
         className={cn(
           'group relative bg-[#1A1A1A] hover:bg-[#202020] border border-[#262626] hover:border-[#333333] rounded-lg p-3.5 space-y-2.5 transition-all duration-150 cursor-pointer select-none shadow-xs',
           isDragging && 'opacity-30 border-dashed border-neutral-400 scale-[0.99]',
+          isOverCard && 'border-t-2 border-t-[#EDEDED] bg-[#222222]',
           isCompleted && 'bg-[#151515] border-[#222222]'
         )}
       >
@@ -113,10 +143,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
               className={cn(
                 'inline-flex items-center p-1 rounded bg-[#242424] border border-[#2F2F2F] text-[11px] select-none',
                 task.priority === 'high'
-                  ? 'text-rose-400'
+                  ? 'text-rose-400 border-rose-500/20 bg-rose-500/10'
                   : task.priority === 'medium'
-                  ? 'text-amber-400'
-                  : 'text-slate-400'
+                  ? 'text-amber-400 border-amber-500/20 bg-amber-500/10'
+                  : 'text-slate-400 border-slate-500/20 bg-slate-500/10'
               )}
               title={`Priority: ${task.priority}`}
             >
@@ -142,9 +172,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
               className={cn(
                 'inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-[#242424] border border-[#2F2F2F] select-none',
                 dueDateInfo.isOverdue
-                  ? 'text-rose-400 border-rose-500/30'
+                  ? 'text-rose-400 border-rose-500/30 bg-rose-500/10'
                   : dueDateInfo.isToday
-                  ? 'text-amber-400 border-amber-500/30'
+                  ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
+                  : dueDateInfo.isTomorrow
+                  ? 'text-sky-400 border-sky-500/30 bg-sky-500/10'
                   : 'text-[#999999]'
               )}
               title={`Due: ${task.dueDate}`}

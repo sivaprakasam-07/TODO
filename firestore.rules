@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default: Deny all unauthenticated or unmatched access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // User-scoped Task Management: users/{userId}/tasks/{taskId}
+    match /users/{userId}/tasks/{taskId} {
+      // Read & Delete: Only the authenticated owner can access their tasks
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+
+      // Create validation:
+      // - Must be authenticated as the owner
+      // - createdByUid must match authenticated user
+      // - title must be a non-empty string
+      // - status must be a valid Kanban column state
+      allow create: if request.auth != null 
+                    && request.auth.uid == userId
+                    && request.resource.data.createdByUid == userId
+                    && request.resource.data.title is string
+                    && request.resource.data.title.size() > 0
+                    && request.resource.data.status in ['todo', 'in-progress', 'completed'];
+
+      // Update validation:
+      // - Must be authenticated as the owner
+      // - title must remain valid
+      // - status must remain valid
+      allow update: if request.auth != null 
+                    && request.auth.uid == userId
+                    && (request.resource.data.title is string && request.resource.data.title.size() > 0)
+                    && request.resource.data.status in ['todo', 'in-progress', 'completed'];
+    }
+
+    // User Profile Data (if stored in Firestore)
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

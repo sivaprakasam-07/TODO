@@ -24,6 +24,7 @@ export interface CreateTaskServiceInput {
   priority?: Priority;
   dueDate?: string;
   tags?: string[];
+  order?: number;
   createdByName?: string;
   createdByEmail?: string;
   createdByPhotoURL?: string;
@@ -49,7 +50,7 @@ function timestampToIso(value: unknown): string {
 /**
  * Parses a Firestore document snapshot into a Task entity.
  */
-export function parseFirestoreTask(docSnap: QueryDocumentSnapshot<DocumentData>): Task {
+export function parseFirestoreTask(docSnap: QueryDocumentSnapshot<DocumentData>, fallbackIndex: number = 0): Task {
   const data = docSnap.data();
 
   return {
@@ -61,6 +62,7 @@ export function parseFirestoreTask(docSnap: QueryDocumentSnapshot<DocumentData>)
     priority: (data.priority as Priority) || undefined,
     dueDate: data.dueDate || undefined,
     tags: Array.isArray(data.tags) ? data.tags : [],
+    order: typeof data.order === 'number' ? data.order : fallbackIndex,
     createdAt: timestampToIso(data.createdAt),
     updatedAt: timestampToIso(data.updatedAt),
     completedAt: data.completedAt ? timestampToIso(data.completedAt) : null,
@@ -91,9 +93,7 @@ export function subscribeToUserTasks(
   return onSnapshot(
     tasksCollectionRef,
     (snapshot) => {
-      const tasks = snapshot.docs.map((d) => parseFirestoreTask(d));
-      // Sort tasks by createdAt desc
-      tasks.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const tasks = snapshot.docs.map((d, idx) => parseFirestoreTask(d, idx));
       onTasksUpdate(tasks);
     },
     (error) => {
@@ -104,7 +104,7 @@ export function subscribeToUserTasks(
 }
 
 /**
- * Creates a new task document in Firestore under users/{uid}/tasks with author details.
+ * Creates a new task document in Firestore under users/{uid}/tasks with author details and order.
  */
 export async function createFirestoreTask(
   uid: string,
@@ -118,6 +118,8 @@ export async function createFirestoreTask(
   const newDocRef = doc(tasksCollectionRef);
 
   const initialStatus = input.status || 'todo';
+  const columnTasks = existingTasks.filter((t) => t.status === initialStatus && !t.deletedAt);
+  const taskOrder = typeof input.order === 'number' ? input.order : columnTasks.length;
 
   const taskPayload = {
     taskNumber: nextTaskNumber,
@@ -127,6 +129,7 @@ export async function createFirestoreTask(
     priority: input.priority || null,
     dueDate: input.dueDate || null,
     tags: input.tags || [],
+    order: taskOrder,
     createdBy: input.createdByName || null,
     createdByUid: uid,
     createdByEmail: input.createdByEmail || null,
@@ -170,28 +173,59 @@ export async function updateFirestoreTask(
   if (updates.priority !== undefined) payload.priority = updates.priority || null;
   if (updates.dueDate !== undefined) payload.dueDate = updates.dueDate || null;
   if (updates.tags !== undefined) payload.tags = updates.tags;
+  if (updates.order !== undefined) payload.order = updates.order;
   if (updates.deletedAt !== undefined) payload.deletedAt = updates.deletedAt;
 
   await updateDoc(taskDocRef, payload);
 }
 
 /**
- * Moves a task to a new Kanban status.
+ * Moves a task to a new Kanban status and optional order.
  */
 export async function moveFirestoreTask(
   uid: string,
   taskId: string,
-  newStatus: Status
+  newStatus: Status,
+  newOrder?: number
 ): Promise<void> {
   if (!db) throw new Error('Firestore is not initialized.');
 
   const taskDocRef = doc(db, 'users', uid, 'tasks', taskId);
 
-  await updateDoc(taskDocRef, {
+  const payload: Record<string, unknown> = {
     status: newStatus,
     updatedAt: serverTimestamp(),
     completedAt: newStatus === 'completed' ? serverTimestamp() : null,
+  };
+
+  if (typeof newOrder === 'number') {
+    payload.order = newOrder;
+  }
+
+  await updateDoc(taskDocRef, payload);
+}
+
+/**
+ * Persists updated ordering of tasks in a column.
+ */
+export async function reorderFirestoreTasks(
+  uid: string,
+  reorderedTasks: { id: string; order: number }[]
+): Promise<void> {
+  if (!db || reorderedTasks.length === 0) return;
+
+  const firestore = db;
+  const batch = writeBatch(firestore);
+
+  reorderedTasks.forEach(({ id, order }) => {
+    const taskDocRef = doc(firestore, 'users', uid, 'tasks', id);
+    batch.update(taskDocRef, {
+      order,
+      updatedAt: serverTimestamp(),
+    });
   });
+
+  await batch.commit();
 }
 
 /**
@@ -210,14 +244,19 @@ export async function softDeleteFirestoreTask(uid: string, taskId: string): Prom
 /**
  * Restores a soft-deleted task (clears deletedAt).
  */
-export async function restoreFirestoreTask(uid: string, taskId: string): Promise<void> {
+export async function restoreFirestoreTask(uid: string, taskId: string, newOrder?: number): Promise<void> {
   if (!db) throw new Error('Firestore is not initialized.');
 
   const taskDocRef = doc(db, 'users', uid, 'tasks', taskId);
-  await updateDoc(taskDocRef, {
+  const payload: Record<string, unknown> = {
     deletedAt: null,
     updatedAt: serverTimestamp(),
-  });
+  };
+  if (typeof newOrder === 'number') {
+    payload.order = newOrder;
+  }
+
+  await updateDoc(taskDocRef, payload);
 }
 
 /**
@@ -231,20 +270,24 @@ export async function permanentlyDeleteFirestoreTask(uid: string, taskId: string
 }
 
 /**
- * Permanently deletes all soft-deleted tasks for the user.
+ * Permanently deletes all soft-deleted tasks for the user (Empty Trash).
  */
 export async function deleteAllTrashFirestoreTasks(uid: string, trashTasks: Task[]): Promise<void> {
   if (!db) throw new Error('Firestore is not initialized.');
   if (trashTasks.length === 0) return;
 
   const firestore = db;
-  const batch = writeBatch(firestore);
-  trashTasks.forEach((task) => {
-    const taskDocRef = doc(firestore, 'users', uid, 'tasks', task.id);
-    batch.delete(taskDocRef);
-  });
+  const BATCH_SIZE = 400;
 
-  await batch.commit();
+  for (let i = 0; i < trashTasks.length; i += BATCH_SIZE) {
+    const batch = writeBatch(firestore);
+    const chunk = trashTasks.slice(i, i + BATCH_SIZE);
+    chunk.forEach((task) => {
+      const taskDocRef = doc(firestore, 'users', uid, 'tasks', task.id);
+      batch.delete(taskDocRef);
+    });
+    await batch.commit();
+  }
 }
 
 /**
@@ -293,7 +336,7 @@ export async function migrateLocalStorageTasksToFirestore(
     const batch = writeBatch(firestore);
     const tasksCollectionRef = collection(firestore, 'users', uid, 'tasks');
 
-    legacyTasks.forEach((task) => {
+    legacyTasks.forEach((task, idx) => {
       const docRef = task.id ? doc(tasksCollectionRef, task.id) : doc(tasksCollectionRef);
       batch.set(docRef, {
         taskNumber: task.taskNumber || 'TASK-001',
@@ -303,6 +346,7 @@ export async function migrateLocalStorageTasksToFirestore(
         priority: task.priority || null,
         dueDate: task.dueDate || null,
         tags: task.tags || [],
+        order: typeof task.order === 'number' ? task.order : idx,
         createdBy: task.createdBy || authorName || null,
         createdByUid: task.createdByUid || uid,
         createdByEmail: task.createdByEmail || authorEmail || null,

@@ -15,6 +15,7 @@ import {
   createFirestoreTask,
   updateFirestoreTask,
   moveFirestoreTask,
+  reorderFirestoreTasks,
   softDeleteFirestoreTask,
   restoreFirestoreTask,
   permanentlyDeleteFirestoreTask,
@@ -32,6 +33,7 @@ export interface CreateTaskInput {
   priority?: Priority;
   dueDate?: string;
   tags?: string[];
+  order?: number;
 }
 
 interface TaskContextType {
@@ -47,7 +49,8 @@ interface TaskContextType {
   getTaskById: (id: string) => Task | undefined;
   createTask: (input: CreateTaskInput) => Promise<string | undefined>;
   updateTask: (id: string, updates: Partial<Omit<Task, 'id' | 'createdAt' | 'taskNumber'>>) => Promise<void>;
-  moveTask: (id: string, newStatus: Status) => Promise<void>;
+  moveTask: (id: string, newStatus: Status, targetIndex?: number) => Promise<void>;
+  reorderTasks: (status: Status, newOrderedTasks: Task[]) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   restoreTask: (id: string) => Promise<void>;
   permanentlyDeleteTask: (id: string) => Promise<void>;
@@ -129,11 +132,18 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [authUser, user.name, showToast]);
 
-  // Active non-deleted tasks
-  const activeTasks = useMemo(() => tasks.filter((t) => !t.deletedAt), [tasks]);
+  // Active non-deleted tasks sorted by order ascending
+  const activeTasks = useMemo(() => {
+    const list = tasks.filter((t) => !t.deletedAt);
+    return list.sort((a, b) => a.order - b.order);
+  }, [tasks]);
 
   // Soft-deleted trash tasks
-  const trashTasks = useMemo(() => tasks.filter((t) => !!t.deletedAt), [tasks]);
+  const trashTasks = useMemo(() => {
+    return tasks
+      .filter((t) => !!t.deletedAt)
+      .sort((a, b) => new Date(b.deletedAt || 0).getTime() - new Date(a.deletedAt || 0).getTime());
+  }, [tasks]);
 
   // Tasks grouped by Kanban status
   const tasksByStatus = useMemo(() => {
@@ -172,7 +182,7 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return newTaskId;
       } catch (err) {
         console.error('[TaskContext] Failed to create task:', err);
-        showToast({ message: 'Task could not be saved.', type: 'error' });
+        showToast({ message: "Couldn't create task. Please try again.", type: 'error' });
         return;
       }
     },
@@ -187,18 +197,18 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await updateFirestoreTask(authUser.uid, id, updates);
       } catch (err) {
         console.error('[TaskContext] Failed to update task:', err);
-        showToast({ message: 'Failed to update task.', type: 'error' });
+        showToast({ message: "Couldn't update task. Please try again.", type: 'error' });
       }
     },
     [authUser, showToast]
   );
 
   const moveTask = useCallback(
-    async (id: string, newStatus: Status) => {
+    async (id: string, newStatus: Status, targetIndex?: number) => {
       if (!authUser) return;
 
       try {
-        await moveFirestoreTask(authUser.uid, id, newStatus);
+        await moveFirestoreTask(authUser.uid, id, newStatus, targetIndex);
         const statusLabels: Record<Status, string> = {
           todo: 'Todo',
           'in-progress': 'In Progress',
@@ -207,7 +217,29 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         showToast({ message: `Moved to ${statusLabels[newStatus]}`, type: 'info' });
       } catch (err) {
         console.error('[TaskContext] Failed to move task:', err);
-        showToast({ message: 'Failed to move task.', type: 'error' });
+        showToast({ message: "Couldn't move task. Please try again.", type: 'error' });
+      }
+    },
+    [authUser, showToast]
+  );
+
+  const reorderTasks = useCallback(
+    async (status: Status, newOrderedTasks: Task[]) => {
+      if (!authUser) return;
+
+      // Optimistic local state update
+      setTasks((prev) => {
+        const others = prev.filter((t) => t.status !== status || !!t.deletedAt);
+        const updated = newOrderedTasks.map((task, idx) => ({ ...task, order: idx }));
+        return [...updated, ...others];
+      });
+
+      try {
+        const payload = newOrderedTasks.map((t, idx) => ({ id: t.id, order: idx }));
+        await reorderFirestoreTasks(authUser.uid, payload);
+      } catch (err) {
+        console.error('[TaskContext] Failed to reorder tasks:', err);
+        showToast({ message: "Couldn't save task order.", type: 'error' });
       }
     },
     [authUser, showToast]
@@ -218,14 +250,20 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!authUser) return;
 
       try {
-        await restoreFirestoreTask(authUser.uid, id);
+        const taskToRestore = tasks.find((t) => t.id === id);
+        const colTasks = tasks.filter(
+          (t) => t.status === (taskToRestore?.status || 'todo') && !t.deletedAt
+        );
+        const newOrder = colTasks.length;
+
+        await restoreFirestoreTask(authUser.uid, id, newOrder);
         showToast({ message: 'Task restored', type: 'success' });
       } catch (err) {
         console.error('[TaskContext] Failed to restore task:', err);
-        showToast({ message: 'Failed to restore task.', type: 'error' });
+        showToast({ message: "Couldn't restore task. Please try again.", type: 'error' });
       }
     },
-    [authUser, showToast]
+    [authUser, tasks, showToast]
   );
 
   const deleteTask = useCallback(
@@ -252,7 +290,7 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
       } catch (err) {
         console.error('[TaskContext] Failed to delete task:', err);
-        showToast({ message: 'Task could not be deleted.', type: 'error' });
+        showToast({ message: "Couldn't delete task. Please try again.", type: 'error' });
       }
     },
     [authUser, tasks, restoreTask, showToast]
@@ -267,7 +305,7 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         showToast({ message: 'Task permanently deleted', type: 'success' });
       } catch (err) {
         console.error('[TaskContext] Failed to permanently delete task:', err);
-        showToast({ message: 'Failed to permanently delete task.', type: 'error' });
+        showToast({ message: "Couldn't permanently delete task.", type: 'error' });
       }
     },
     [authUser, showToast]
@@ -275,13 +313,17 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const deleteAllTrashTasks = useCallback(async () => {
     if (!authUser) return;
+    if (trashTasks.length === 0) {
+      showToast({ message: 'Trash is already empty.', type: 'info' });
+      return;
+    }
 
     try {
       await deleteAllTrashFirestoreTasks(authUser.uid, trashTasks);
-      showToast({ message: 'Trash emptied', type: 'success' });
+      showToast({ message: 'Trash emptied permanently.', type: 'success' });
     } catch (err) {
       console.error('[TaskContext] Failed to empty trash:', err);
-      showToast({ message: 'Failed to empty trash.', type: 'error' });
+      showToast({ message: "Couldn't empty trash. Please try again.", type: 'error' });
     }
   }, [authUser, trashTasks, showToast]);
 
@@ -319,6 +361,7 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         createTask,
         updateTask,
         moveTask,
+        reorderTasks,
         deleteTask,
         restoreTask,
         permanentlyDeleteTask,

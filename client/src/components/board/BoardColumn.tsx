@@ -4,6 +4,7 @@ import { Task, Status } from '../../types/task';
 import { useTasks } from '../../context/TaskContext';
 import { useUI } from '../../context/UIContext';
 import { TaskCard } from './TaskCard';
+import { SelectTaskModal } from './SelectTaskModal';
 import { Plus, Circle, Clock, CheckCircle2, ArrowUpRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -20,9 +21,10 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
   tasks,
   isSearchActive = false,
 }) => {
-  const { moveTask, isLoading } = useTasks();
+  const { tasks: allTasks, moveTask, reorderTasks, isLoading } = useTasks();
   const { openCreateTaskModal, setSearchQuery } = useUI();
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isSelectTaskModalOpen, setIsSelectTaskModalOpen] = useState(false);
 
   const statusIcons: Record<
     Status,
@@ -50,9 +52,47 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
     setIsDragOver(false);
     const taskId = e.dataTransfer.getData('text/plain');
     if (taskId) {
-      moveTask(taskId, status);
+      moveTask(taskId, status, tasks.length);
     }
   };
+
+  const handleDropOnTask = (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+
+    const draggedTask = allTasks.find((t) => t.id === draggedId);
+    if (!draggedTask) return;
+
+    if (draggedTask.status === status) {
+      // Reorder within same column
+      const currentList = [...tasks];
+      const fromIndex = currentList.findIndex((t) => t.id === draggedId);
+      const toIndex = currentList.findIndex((t) => t.id === targetId);
+      if (fromIndex !== -1 && toIndex !== -1) {
+        const [moved] = currentList.splice(fromIndex, 1);
+        currentList.splice(toIndex, 0, moved);
+        reorderTasks(status, currentList);
+      }
+    } else {
+      // Move from another column to specific target position
+      const toIndex = tasks.findIndex((t) => t.id === targetId);
+      moveTask(draggedId, status, toIndex !== -1 ? toIndex : tasks.length);
+    }
+  };
+
+  const handleColumnAction = () => {
+    if (status === 'todo') {
+      openCreateTaskModal('todo');
+    } else {
+      setIsSelectTaskModalOpen(true);
+    }
+  };
+
+  const actionButtonText =
+    status === 'todo'
+      ? 'New Work item'
+      : status === 'in-progress'
+      ? 'Start a task'
+      : 'Complete a task';
 
   const getEmptyStateMessage = () => {
     if (isSearchActive) {
@@ -73,14 +113,16 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
     if (status === 'in-progress') {
       return {
         title: 'No tasks in progress.',
+        subtitle: 'Start a task from your Todo list.',
         actionLabel: 'Start a task',
-        onAction: () => openCreateTaskModal('in-progress'),
+        onAction: () => setIsSelectTaskModalOpen(true),
       };
     }
     return {
       title: 'No completed tasks yet.',
-      actionLabel: 'Add completed task',
-      onAction: () => openCreateTaskModal('completed'),
+      subtitle: 'Mark an active task as done.',
+      actionLabel: 'Complete a task',
+      onAction: () => setIsSelectTaskModalOpen(true),
     };
   };
 
@@ -115,25 +157,31 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => openCreateTaskModal(status)}
+            onClick={handleColumnAction}
             className="p-1 hover:text-[#F5F5F5] rounded transition-colors cursor-pointer"
-            title={`Add task to ${title}`}
-            aria-label={`Add task to ${title}`}
+            title={
+              status === 'todo'
+                ? 'Create task in Todo'
+                : status === 'in-progress'
+                ? 'Start a task from Todo'
+                : 'Complete an active task'
+            }
+            aria-label={`Action for ${title}`}
           >
             <Plus className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Top + New Work item button */}
+      {/* Top action button */}
       <div className="shrink-0 pb-3">
         <button
           type="button"
-          onClick={() => openCreateTaskModal(status)}
+          onClick={handleColumnAction}
           className="flex items-center gap-1.5 text-xs text-[#777777] hover:text-[#F5F5F5] transition-colors cursor-pointer py-1"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>New Work item</span>
+          <span>{actionButtonText}</span>
         </button>
       </div>
 
@@ -161,11 +209,24 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
         ) : (
           <AnimatePresence mode="popLayout">
             {tasks.map((task) => (
-              <TaskCard key={task.id} task={task} />
+              <TaskCard
+                key={task.id}
+                task={task}
+                onDropOnTask={handleDropOnTask}
+              />
             ))}
           </AnimatePresence>
         )}
       </div>
+
+      {/* Select Task Picker Modal for In Progress / Completed */}
+      {status !== 'todo' && (
+        <SelectTaskModal
+          isOpen={isSelectTaskModalOpen}
+          onClose={() => setIsSelectTaskModalOpen(false)}
+          targetStatus={status as 'in-progress' | 'completed'}
+        />
+      )}
     </div>
   );
 };

@@ -4,6 +4,7 @@ import { Header } from './Header';
 import { Board } from '../board/Board';
 import { CalendarView } from '../calendar/CalendarView';
 import { ProfileView } from '../profile/ProfileView';
+import { TrashView } from '../trash/TrashView';
 import { TaskDetails } from '../task/TaskDetails';
 import { TaskDialog } from '../task/TaskDialog';
 import { ToastContainer } from '../ui/ToastContainer';
@@ -18,6 +19,8 @@ export const AppLayout: React.FC = () => {
         return <Board />;
       case 'calendar':
         return <CalendarView />;
+      case 'trash':
+        return <TrashView />;
       case 'profile':
         return <ProfileView />;
       default:
