@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Priority, Status } from '../../types/task';
 import { useTasks } from '../../context/TaskContext';
@@ -8,7 +8,7 @@ import { X, Trash2, Tag as TagIcon, Plus } from 'lucide-react';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 export const TaskDetails: React.FC = () => {
-  const { getTaskById, updateTask, deleteTask } = useTasks();
+  const { getTaskById, updateTask, deleteTask, tasks } = useTasks();
   const { selectedTaskId, setSelectedTaskId } = useUI();
   const prefersReduced = useReducedMotion();
 
@@ -18,6 +18,16 @@ export const TaskDetails: React.FC = () => {
   const [description, setDescription] = useState('');
   const [newTag, setNewTag] = useState('');
   const [isAddingTag, setIsAddingTag] = useState(false);
+
+  // Available tag suggestions from other active tasks
+  const availableTags = useMemo(() => {
+    if (!task) return [];
+    const set = new Set<string>();
+    tasks.forEach((t) => {
+      t.tags?.forEach((tag) => set.add(tag));
+    });
+    return Array.from(set).filter((tag) => !task.tags.includes(tag)).slice(0, 6);
+  }, [tasks, task]);
 
   useEffect(() => {
     if (task) {
@@ -31,16 +41,18 @@ export const TaskDetails: React.FC = () => {
   if (!task) return null;
 
   const handleTitleBlur = () => {
-    if (title.trim() && title !== task.title) {
-      updateTask(task.id, { title: title.trim() });
+    const trimmed = title.trim();
+    if (trimmed && trimmed !== task.title) {
+      updateTask(task.id, { title: trimmed });
     } else {
       setTitle(task.title);
     }
   };
 
   const handleDescriptionBlur = () => {
-    if (description !== (task.description || '')) {
-      updateTask(task.id, { description: description.trim() || undefined });
+    const trimmed = description.trim();
+    if (trimmed !== (task.description || '')) {
+      updateTask(task.id, { description: trimmed || undefined });
     }
   };
 
@@ -56,9 +68,28 @@ export const TaskDetails: React.FC = () => {
     updateTask(task.id, { dueDate: e.target.value || undefined });
   };
 
-  const handleAddTag = (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = newTag.trim().replace(/^#/, '');
+  const setDueDatePreset = (type: 'today' | 'tomorrow' | 'clear') => {
+    const now = new Date();
+    if (type === 'today') {
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      updateTask(task.id, { dueDate: `${y}-${m}-${d}` });
+    } else if (type === 'tomorrow') {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const y = tomorrow.getFullYear();
+      const m = String(tomorrow.getMonth() + 1).padStart(2, '0');
+      const d = String(tomorrow.getDate()).padStart(2, '0');
+      updateTask(task.id, { dueDate: `${y}-${m}-${d}` });
+    } else {
+      updateTask(task.id, { dueDate: undefined });
+    }
+  };
+
+  const handleAddTag = (tagToAdd?: string) => {
+    const raw = tagToAdd !== undefined ? tagToAdd : newTag;
+    const clean = raw.trim().replace(/^#/, '');
     if (clean && !task.tags.includes(clean)) {
       updateTask(task.id, { tags: [...task.tags, clean] });
       setNewTag('');
@@ -122,7 +153,7 @@ export const TaskDetails: React.FC = () => {
               <button
                 type="button"
                 onClick={handleDelete}
-                className="p-1.5 text-[#666666] hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
+                className="p-1.5 text-[#666666] hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
                 title="Delete task"
                 aria-label="Delete task"
               >
@@ -131,7 +162,7 @@ export const TaskDetails: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSelectedTaskId(null)}
-                className="p-1.5 text-[#666666] hover:text-[#F5F5F5] hover:bg-[#1C1C1C] rounded transition-colors"
+                className="p-1.5 text-[#666666] hover:text-[#F5F5F5] hover:bg-[#1C1C1C] rounded transition-colors cursor-pointer"
                 aria-label="Close"
               >
                 <X className="w-4 h-4" />
@@ -147,7 +178,14 @@ export const TaskDetails: React.FC = () => {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={handleTitleBlur}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                }}
                 rows={2}
+                maxLength={120}
                 placeholder="Task title..."
                 className="w-full bg-transparent text-base font-semibold text-[#F5F5F5] placeholder-[#555555] border-0 focus:outline-none focus:ring-0 resize-none p-0 leading-snug"
               />
@@ -163,6 +201,7 @@ export const TaskDetails: React.FC = () => {
                 onChange={(e) => setDescription(e.target.value)}
                 onBlur={handleDescriptionBlur}
                 rows={3}
+                maxLength={500}
                 placeholder="Add notes, specifications, or details..."
                 className="w-full bg-[#161616] text-xs text-[#E0E0E0] placeholder-[#555555] border border-[#242424] rounded-lg p-2.5 focus:outline-none focus:border-[#383838] transition-colors leading-relaxed"
               />
@@ -177,7 +216,7 @@ export const TaskDetails: React.FC = () => {
                   <select
                     value={task.status}
                     onChange={(e) => handleStatusChange(e.target.value as Status)}
-                    className="w-full bg-[#1B1B1B] border border-[#2B2B2B] rounded px-2 py-1 text-xs text-[#F5F5F5] focus:outline-none"
+                    className="w-full bg-[#1B1B1B] border border-[#2B2B2B] rounded px-2.5 py-1.5 text-xs text-[#F5F5F5] focus:outline-none cursor-pointer"
                   >
                     <option value="todo">Todo</option>
                     <option value="in-progress">In Progress</option>
@@ -193,7 +232,7 @@ export const TaskDetails: React.FC = () => {
                   <select
                     value={task.priority || ''}
                     onChange={(e) => handlePriorityChange(e.target.value as Priority | '')}
-                    className="w-full bg-[#1B1B1B] border border-[#2B2B2B] rounded px-2 py-1 text-xs text-[#F5F5F5] focus:outline-none"
+                    className="w-full bg-[#1B1B1B] border border-[#2B2B2B] rounded px-2.5 py-1.5 text-xs text-[#F5F5F5] focus:outline-none cursor-pointer"
                   >
                     <option value="">None</option>
                     <option value="low">Low</option>
@@ -204,20 +243,49 @@ export const TaskDetails: React.FC = () => {
               </div>
 
               {/* Due Date */}
-              <div className="grid grid-cols-3 items-center gap-2">
-                <span className="text-[#777777]">Due Date</span>
-                <div className="col-span-2">
+              <div className="grid grid-cols-3 items-start gap-2">
+                <span className="text-[#777777] pt-1.5">Due Date</span>
+                <div className="col-span-2 space-y-1.5">
                   <input
                     type="date"
                     value={task.dueDate || ''}
                     onChange={handleDueDateChange}
-                    className="w-full bg-[#1B1B1B] border border-[#2B2B2B] rounded px-2 py-1 text-xs text-[#F5F5F5] focus:outline-none"
+                    className="w-full bg-[#1B1B1B] border border-[#2B2B2B] rounded px-2.5 py-1.5 text-xs text-[#F5F5F5] focus:outline-none"
                   />
+                  <div className="flex items-center gap-2 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setDueDatePreset('today')}
+                      className="text-[#888888] hover:text-[#EDEDED] transition-colors"
+                    >
+                      Today
+                    </button>
+                    <span className="text-[#444444]">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setDueDatePreset('tomorrow')}
+                      className="text-[#888888] hover:text-[#EDEDED] transition-colors"
+                    >
+                      Tomorrow
+                    </button>
+                    {task.dueDate && (
+                      <>
+                        <span className="text-[#444444]">•</span>
+                        <button
+                          type="button"
+                          onClick={() => setDueDatePreset('clear')}
+                          className="text-rose-400/80 hover:text-rose-400 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Tags */}
+            {/* Tags Section */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-[#777777] flex items-center gap-1">
@@ -227,7 +295,7 @@ export const TaskDetails: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsAddingTag(true)}
-                    className="text-xs text-[#8A8A8A] hover:text-[#F5F5F5] flex items-center gap-1 transition-colors"
+                    className="text-xs text-[#8A8A8A] hover:text-[#F5F5F5] flex items-center gap-1 transition-colors cursor-pointer"
                   >
                     <Plus className="w-3 h-3" /> Add
                   </button>
@@ -244,7 +312,8 @@ export const TaskDetails: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleRemoveTag(tag)}
-                      className="text-[#666666] hover:text-rose-400 p-0.5 transition-colors"
+                      className="text-[#666666] hover:text-rose-400 p-0.5 transition-colors cursor-pointer"
+                      aria-label={`Remove tag ${tag}`}
                     >
                       ×
                     </button>
@@ -256,34 +325,62 @@ export const TaskDetails: React.FC = () => {
               </div>
 
               {isAddingTag && (
-                <form onSubmit={handleAddTag} className="flex items-center gap-2 pt-1">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleAddTag();
+                  }}
+                  className="flex items-center gap-2 pt-1"
+                >
                   <input
                     type="text"
                     value={newTag}
                     onChange={(e) => setNewTag(e.target.value)}
                     placeholder="New tag..."
                     autoFocus
-                    className="flex-1 bg-[#161616] text-xs text-[#F5F5F5] border border-[#2B2B2B] rounded px-2 py-1 focus:outline-none"
+                    className="flex-1 bg-[#161616] text-xs text-[#F5F5F5] border border-[#2B2B2B] rounded px-2.5 py-1.5 focus:outline-none"
                   />
                   <button
                     type="submit"
-                    className="px-2.5 py-1 text-xs bg-[#242424] hover:bg-[#303030] text-[#F5F5F5] rounded transition-colors"
+                    className="px-2.5 py-1.5 text-xs bg-[#242424] hover:bg-[#303030] text-[#F5F5F5] rounded transition-colors cursor-pointer"
                   >
                     Add
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsAddingTag(false)}
-                    className="px-2 py-1 text-xs text-[#777777] hover:text-[#F5F5F5]"
+                    className="px-2 py-1.5 text-xs text-[#777777] hover:text-[#F5F5F5] cursor-pointer"
                   >
                     Cancel
                   </button>
                 </form>
               )}
+
+              {/* Tag Auto-Suggestions */}
+              {availableTags.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1 pt-1">
+                  <span className="text-[10px] text-[#555555]">Suggestions:</span>
+                  {availableTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => handleAddTag(tag)}
+                      className="text-[10px] text-[#888888] hover:text-[#EDEDED] bg-[#181818] hover:bg-[#222222] border border-[#262626] px-1.5 py-0.5 rounded transition-colors"
+                    >
+                      +{tag}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Timestamps */}
+            {/* Timestamps & Author */}
             <div className="pt-4 border-t border-[#1E1E1E] space-y-1 text-[11px] text-[#555555]">
+              {task.createdBy && (
+                <div>
+                  Created by: <span className="text-[#8A8A8A] font-medium">{task.createdBy}</span>
+                </div>
+              )}
               <div>Created: {formatTimestamp(task.createdAt)}</div>
               <div>Updated: {formatTimestamp(task.updatedAt)}</div>
               {task.completedAt && (

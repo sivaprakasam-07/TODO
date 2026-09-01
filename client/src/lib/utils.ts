@@ -29,45 +29,56 @@ export function getNextTaskNumber(existingTasks: Task[]): string {
 }
 
 /**
- * Formats a due date into a human readable string ("Today", "Tomorrow", "Jun 29", or "2d overdue")
+ * Formats a due date into a human readable string ("Today", "Tomorrow", "Sep 12", or "2d overdue")
+ * Parses YYYY-MM-DD without UTC timezone offsets.
  */
 export function formatDueDate(dateStr?: string): {
   label: string;
   isOverdue: boolean;
   isToday: boolean;
+  isTomorrow: boolean;
 } {
   if (!dateStr) {
-    return { label: '', isOverdue: false, isToday: false };
+    return { label: '', isOverdue: false, isToday: false, isTomorrow: false };
   }
 
-  const target = new Date(dateStr);
+  const parts = dateStr.split('-');
+  let targetDateOnly: Date;
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    targetDateOnly = new Date(y, m, d);
+  } else {
+    targetDateOnly = new Date(dateStr);
+  }
+  targetDateOnly.setHours(0, 0, 0, 0);
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const targetDateOnly = new Date(target);
-  targetDateOnly.setHours(0, 0, 0, 0);
-
   const diffTime = targetDateOnly.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) {
-    return { label: 'Today', isOverdue: false, isToday: true };
+    return { label: 'Today', isOverdue: false, isToday: true, isTomorrow: false };
   } else if (diffDays === 1) {
-    return { label: 'Tomorrow', isOverdue: false, isToday: false };
+    return { label: 'Tomorrow', isOverdue: false, isToday: false, isTomorrow: true };
   } else if (diffDays === -1) {
-    return { label: 'Yesterday', isOverdue: true, isToday: false };
+    return { label: '1d overdue', isOverdue: true, isToday: false, isTomorrow: false };
   } else if (diffDays < 0) {
     return {
       label: `${Math.abs(diffDays)}d overdue`,
       isOverdue: true,
       isToday: false,
+      isTomorrow: false,
     };
   } else {
     const formatted = new Intl.DateTimeFormat('en-US', {
       month: 'short',
       day: 'numeric',
-    }).format(target);
-    return { label: formatted, isOverdue: false, isToday: false };
+    }).format(targetDateOnly);
+    return { label: formatted, isOverdue: false, isToday: false, isTomorrow: false };
   }
 }
 
@@ -100,7 +111,8 @@ export function getCalendarMonthDays(year: number, month: number): CalendarDay[]
   const lastDayOfMonth = new Date(year, month + 1, 0);
 
   const days: CalendarDay[] = [];
-  const todayStr = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   // Monday = 1, Sunday = 0
   let startDay = firstDayOfMonth.getDay();
@@ -110,7 +122,7 @@ export function getCalendarMonthDays(year: number, month: number): CalendarDay[]
   // Previous month trailing days
   for (let i = startDay - 1; i >= 0; i--) {
     const d = new Date(year, month, -i);
-    const dStr = d.toISOString().split('T')[0];
+    const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     days.push({
       date: d,
       dateString: dStr,
@@ -122,7 +134,7 @@ export function getCalendarMonthDays(year: number, month: number): CalendarDay[]
   // Current month days
   for (let i = 1; i <= lastDayOfMonth.getDate(); i++) {
     const d = new Date(year, month, i);
-    const dStr = d.toISOString().split('T')[0];
+    const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     days.push({
       date: d,
       dateString: dStr,
@@ -135,7 +147,7 @@ export function getCalendarMonthDays(year: number, month: number): CalendarDay[]
   const remaining = (7 - (days.length % 7)) % 7;
   for (let i = 1; i <= remaining; i++) {
     const d = new Date(year, month + 1, i);
-    const dStr = d.toISOString().split('T')[0];
+    const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     days.push({
       date: d,
       dateString: dStr,

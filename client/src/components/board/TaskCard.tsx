@@ -54,8 +54,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
   };
 
   const tagColors = ['bg-rose-500', 'bg-sky-500', 'bg-amber-500', 'bg-emerald-500', 'bg-purple-500'];
-  const userDisplayName = authUser?.displayName || user.name || 'User';
-  const userInitial = userDisplayName.charAt(0).toUpperCase() || 'S';
+  const creatorName = task.createdBy || authUser?.displayName || user.name || 'User';
+  const creatorInitial = creatorName.charAt(0).toUpperCase() || 'S';
+  const creatorPhoto = task.createdByPhotoURL || (task.createdByUid === authUser?.uid ? authUser?.photoURL : undefined);
 
   return (
     <motion.div
@@ -153,20 +154,20 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
             </span>
           )}
 
-          {/* Assignee Avatar Circle */}
+          {/* Assignee / Creator Avatar Circle with name tooltip */}
           <div
-            className="w-5 h-5 rounded-full bg-teal-600 text-white font-bold text-[10px] flex items-center justify-center border border-white/10 overflow-hidden"
-            title={`Assigned to ${userDisplayName}`}
+            className="w-5 h-5 rounded-full bg-teal-600 text-white font-bold text-[10px] flex items-center justify-center border border-white/10 overflow-hidden shrink-0"
+            title={`Created by ${creatorName}`}
           >
-            {authUser?.photoURL ? (
+            {creatorPhoto ? (
               <img
-                src={authUser.photoURL}
-                alt={userDisplayName}
+                src={creatorPhoto}
+                alt={creatorName}
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <span>{userInitial}</span>
+              <span>{creatorInitial}</span>
             )}
           </div>
 

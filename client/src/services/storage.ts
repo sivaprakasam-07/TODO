@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   TASKS: 'focusflow:tasks:v1',
   USER: 'focusflow:user:v1',
   SETTINGS: 'focusflow:settings:v1',
+  MIGRATION_PREFIX: 'focusflow:firestore-migration:v1:',
 } as const;
 
 const now = new Date();
@@ -143,11 +144,10 @@ class StorageService {
   getTasks(): Task[] {
     const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
     if (!raw) {
-      this.safeSet(STORAGE_KEYS.TASKS, INITIAL_TASKS);
-      return INITIAL_TASKS;
+      return [];
     }
-    const tasks = this.safeGet<Task[]>(STORAGE_KEYS.TASKS, INITIAL_TASKS);
-    return Array.isArray(tasks) ? tasks : INITIAL_TASKS;
+    const tasks = this.safeGet<Task[]>(STORAGE_KEYS.TASKS, []);
+    return Array.isArray(tasks) ? tasks : [];
   }
 
   saveTasks(tasks: Task[]): void {
@@ -166,6 +166,30 @@ class StorageService {
 
   saveUser(user: User): void {
     this.safeSet(STORAGE_KEYS.USER, user);
+  }
+
+  isMigrationCompleted(uid: string): boolean {
+    try {
+      return localStorage.getItem(`${STORAGE_KEYS.MIGRATION_PREFIX}${uid}`) === 'completed';
+    } catch {
+      return false;
+    }
+  }
+
+  markMigrationCompleted(uid: string): void {
+    try {
+      localStorage.setItem(`${STORAGE_KEYS.MIGRATION_PREFIX}${uid}`, 'completed');
+    } catch (e) {
+      console.error('[StorageService] Error marking migration complete:', e);
+    }
+  }
+
+  clearLegacyTasks(): void {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.TASKS);
+    } catch (e) {
+      console.error('[StorageService] Error clearing legacy tasks:', e);
+    }
   }
 
   clearAll(): void {

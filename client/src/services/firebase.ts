@@ -15,6 +15,10 @@ import {
   getDownloadURL,
   FirebaseStorage,
 } from 'firebase/storage';
+import {
+  getFirestore,
+  Firestore,
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -45,12 +49,14 @@ let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
 let firebaseStorage: FirebaseStorage | null = null;
+let db: Firestore | null = null;
 
 if (isFirebaseConfigured()) {
   try {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     auth = getAuth(app);
     firebaseStorage = getStorage(app);
+    db = getFirestore(app);
     googleProvider = new GoogleAuthProvider();
     googleProvider.setCustomParameters({
       prompt: 'select_account',
@@ -60,7 +66,7 @@ if (isFirebaseConfigured()) {
   }
 }
 
-export { auth, googleProvider, firebaseStorage };
+export { auth, googleProvider, firebaseStorage, db };
 
 /**
  * Initiates Google Sign-In via popup.

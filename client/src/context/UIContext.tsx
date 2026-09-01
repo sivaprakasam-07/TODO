@@ -10,6 +10,10 @@ interface UIContextType {
   createInitialStatus: Status;
   openCreateTaskModal: (initialStatus?: Status) => void;
   closeCreateTaskModal: () => void;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  mobileActiveTab: Status;
+  setMobileActiveTab: (tab: Status) => void;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -19,6 +23,8 @@ export const UIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
   const [createInitialStatus, setCreateInitialStatus] = useState<Status>('todo');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [mobileActiveTab, setMobileActiveTab] = useState<Status>('todo');
 
   const openCreateTaskModal = useCallback((initialStatus: Status = 'todo') => {
     setCreateInitialStatus(initialStatus);
@@ -40,6 +46,10 @@ export const UIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         createInitialStatus,
         openCreateTaskModal,
         closeCreateTaskModal,
+        searchQuery,
+        setSearchQuery,
+        mobileActiveTab,
+        setMobileActiveTab,
       }}
     >
       {children}

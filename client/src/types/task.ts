@@ -15,6 +15,10 @@ export interface Task {
   updatedAt: string;
   completedAt?: string | null;
   deletedAt?: string | null; // For soft delete / undo
+  createdBy?: string;        // Creator display name e.g. "Tamil mani Siva Prakasam"
+  createdByUid?: string;     // Creator Firebase UID
+  createdByEmail?: string;   // Creator Email
+  createdByPhotoURL?: string;// Creator Profile Photo
 }
 
 export type ActiveView = 'board' | 'calendar' | 'profile';

@@ -1,6 +1,5 @@
 import React from 'react';
 import { useUI } from '../../context/UIContext';
-import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { Header } from './Header';
 import { Board } from '../board/Board';
 import { CalendarView } from '../calendar/CalendarView';
@@ -12,9 +11,6 @@ import { cn } from '../../lib/utils';
 
 export const AppLayout: React.FC = () => {
   const { activeView } = useUI();
-
-  // Initialize keyboard shortcuts (N, Esc)
-  useKeyboardShortcuts();
 
   const renderActiveView = () => {
     switch (activeView) {
@@ -41,7 +37,7 @@ export const AppLayout: React.FC = () => {
       {/* Main Workspace View - Fills remaining viewport */}
       <main
         className={cn(
-          'flex-1 min-h-0 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col',
+          'flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-5 flex flex-col',
           isBoardView ? 'overflow-hidden' : 'overflow-y-auto'
         )}
       >

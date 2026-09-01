@@ -11,11 +11,17 @@ interface BoardColumnProps {
   status: Status;
   title: string;
   tasks: Task[];
+  isSearchActive?: boolean;
 }
 
-export const BoardColumn: React.FC<BoardColumnProps> = ({ status, title, tasks }) => {
-  const { moveTask } = useTasks();
-  const { openCreateTaskModal } = useUI();
+export const BoardColumn: React.FC<BoardColumnProps> = ({
+  status,
+  title,
+  tasks,
+  isSearchActive = false,
+}) => {
+  const { moveTask, isLoading } = useTasks();
+  const { openCreateTaskModal, setSearchQuery } = useUI();
   const [isDragOver, setIsDragOver] = useState(false);
 
   const statusIcons: Record<
@@ -48,14 +54,46 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({ status, title, tasks }
     }
   };
 
+  const getEmptyStateMessage = () => {
+    if (isSearchActive) {
+      return {
+        title: 'No tasks found',
+        actionLabel: 'Clear search',
+        onAction: () => setSearchQuery(''),
+      };
+    }
+    if (status === 'todo') {
+      return {
+        title: 'No tasks yet',
+        subtitle: 'Create your first task.',
+        actionLabel: 'Add task',
+        onAction: () => openCreateTaskModal('todo'),
+      };
+    }
+    if (status === 'in-progress') {
+      return {
+        title: 'No tasks in progress.',
+        actionLabel: 'Start a task',
+        onAction: () => openCreateTaskModal('in-progress'),
+      };
+    }
+    return {
+      title: 'No completed tasks yet.',
+      actionLabel: 'Add completed task',
+      onAction: () => openCreateTaskModal('completed'),
+    };
+  };
+
+  const emptyState = getEmptyStateMessage();
+
   return (
     <div
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        'flex flex-col h-full max-h-full min-h-0 transition-colors duration-150 rounded-lg',
-        isDragOver && 'bg-white/[0.02] ring-1 ring-[#333333]'
+        'flex flex-col h-full max-h-full min-h-0 transition-colors duration-150 rounded-lg p-1.5 -m-1.5',
+        isDragOver && 'bg-white/[0.03] ring-1 ring-[#383838]'
       )}
     >
       {/* Column Header (Fixed) */}
@@ -71,6 +109,7 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({ status, title, tasks }
             type="button"
             className="p-1 hover:text-[#F5F5F5] rounded transition-colors cursor-pointer"
             title="Expand column"
+            aria-label="Expand column"
           >
             <ArrowUpRight className="w-3.5 h-3.5" />
           </button>
@@ -100,11 +139,32 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({ status, title, tasks }
 
       {/* Scrollable Task Cards Area */}
       <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1.5">
-        <AnimatePresence mode="popLayout">
-          {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} />
-          ))}
-        </AnimatePresence>
+        {isLoading ? (
+          <div className="space-y-3">
+            <div className="h-24 bg-[#181818]/60 border border-[#242424]/40 rounded-lg animate-pulse" />
+            <div className="h-24 bg-[#181818]/40 border border-[#242424]/30 rounded-lg animate-pulse" />
+          </div>
+        ) : tasks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-32 border border-dashed border-[#1E1E1E] rounded-lg text-center p-4 space-y-1.5 my-auto">
+            <span className="text-xs text-[#666666] font-medium">{emptyState.title}</span>
+            {emptyState.subtitle && (
+              <span className="text-[11px] text-[#4A4A4A]">{emptyState.subtitle}</span>
+            )}
+            <button
+              type="button"
+              onClick={emptyState.onAction}
+              className="text-xs text-[#8A8A8A] hover:text-[#F5F5F5] flex items-center gap-1 pt-0.5 transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" /> {emptyState.actionLabel}
+            </button>
+          </div>
+        ) : (
+          <AnimatePresence mode="popLayout">
+            {tasks.map((task) => (
+              <TaskCard key={task.id} task={task} />
+            ))}
+          </AnimatePresence>
+        )}
       </div>
     </div>
   );
