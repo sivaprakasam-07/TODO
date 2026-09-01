@@ -1,0 +1,18 @@
+{
+  "name": "FocusFlow",
+  "short_name": "FocusFlow",
+  "description": "Minimal dark personal task management workspace",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#141414",
+  "theme_color": "#141414",
+  "icons": [
+    {
+      "src": "/focus1.jpeg",
+      "sizes": "any",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
