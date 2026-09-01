@@ -14,7 +14,7 @@ export const Header: React.FC = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between px-4 sm:px-8 py-3.5 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#1A1A1A]">
+    <header className="sticky top-0 z-30 flex items-center justify-between px-4 sm:px-8 py-3 bg-[#141414]/95 backdrop-blur-md border-b border-[#222222]">
       {/* Left: Brand + Navigation Tabs */}
       <div className="flex items-center gap-6 sm:gap-8">
         {/* Brand */}
@@ -40,8 +40,8 @@ export const Header: React.FC = () => {
                 className={cn(
                   'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer',
                   isActive
-                    ? 'bg-[#1C1C1C] text-[#F5F5F5] font-semibold'
-                    : 'text-[#777777] hover:text-[#C0C0C0] hover:bg-[#141414]'
+                    ? 'bg-[#222222] text-[#F5F5F5] font-semibold'
+                    : 'text-[#777777] hover:text-[#C0C0C0] hover:bg-[#1A1A1A]'
                 )}
               >
                 <Icon className="w-3.5 h-3.5" />

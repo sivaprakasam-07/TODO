@@ -8,6 +8,7 @@ import { ProfileView } from '../profile/ProfileView';
 import { TaskDetails } from '../task/TaskDetails';
 import { TaskDialog } from '../task/TaskDialog';
 import { ToastContainer } from '../ui/ToastContainer';
+import { cn } from '../../lib/utils';
 
 export const AppLayout: React.FC = () => {
   const { activeView } = useUI();
@@ -28,13 +29,22 @@ export const AppLayout: React.FC = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#0A0A0A] text-[#F5F5F5] flex flex-col antialiased">
-      {/* Navigation Header */}
-      <Header />
+  const isBoardView = activeView === 'board';
 
-      {/* Main Workspace View */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+  return (
+    <div className="h-screen max-h-screen w-screen overflow-hidden bg-[#141414] text-[#F5F5F5] flex flex-col antialiased select-none">
+      {/* Navigation Header - Fixed at top */}
+      <div className="shrink-0">
+        <Header />
+      </div>
+
+      {/* Main Workspace View - Fills remaining viewport */}
+      <main
+        className={cn(
+          'flex-1 min-h-0 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col',
+          isBoardView ? 'overflow-hidden' : 'overflow-y-auto'
+        )}
+      >
         {renderActiveView()}
       </main>
 
