@@ -11,8 +11,8 @@ export const LoginPage: React.FC = () => {
       <div className="w-full max-w-sm bg-[#1A1A1A] border border-[#262626] rounded-xl p-6 sm:p-8 space-y-6 shadow-2xl">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white text-black font-bold text-sm mb-1 shadow-sm">
-            F
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl overflow-hidden mb-1 shadow-md border border-[#2E2E2E]">
+            <img src="/focus1.jpeg" alt="FocusFlow" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-lg font-bold tracking-wider uppercase text-[#F5F5F5]">
             FocusFlow

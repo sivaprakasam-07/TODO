@@ -35,9 +35,11 @@ export const Header: React.FC = () => {
       <div className="flex items-center gap-2 sm:gap-5">
         {/* Brand */}
         <div className="flex items-center gap-2 shrink-0">
-          <div className="w-5 h-5 rounded bg-white text-black font-bold text-[11px] flex items-center justify-center">
-            F
-          </div>
+          <img
+            src="/focus1.jpeg"
+            alt="FocusFlow"
+            className="w-5 h-5 rounded object-cover shadow-xs"
+          />
           <span className="font-bold text-xs sm:text-sm tracking-wider uppercase text-[#F5F5F5] hidden xs:inline">
             FocusFlow
           </span>
