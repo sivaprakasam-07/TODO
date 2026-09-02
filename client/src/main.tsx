@@ -15,6 +15,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     navigator.serviceWorker
       .register('/sw.js')
       .then((reg) => {
+        reg.update().catch(() => {});
         console.log('[PWA] ServiceWorker registered with scope:', reg.scope);
       })
       .catch((err) => {

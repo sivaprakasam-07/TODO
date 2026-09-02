@@ -1,10 +1,16 @@
 // FocusFlow Application Shell Service Worker
-const CACHE_NAME = 'focusflow-app-shell-v1';
+const CACHE_NAME = 'focusflow-app-shell-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/focus1.jpeg',
+  '/favicon.png',
+  '/favicon.svg',
+  '/icons/focusflow-192.png',
+  '/icons/focusflow-512.png',
+  '/icons/focusflow-512-maskable.png',
+  '/icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -38,11 +44,28 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle local app shell and Vite assets
+  // Network-first for manifest.json so PWA updates are immediate
+  if (url.pathname === '/manifest.json') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Handle local app shell, icons, and Vite assets
   if (
     url.pathname === '/' ||
     url.pathname === '/index.html' ||
     url.pathname.startsWith('/assets/') ||
+    url.pathname.startsWith('/icons/') ||
     url.pathname.endsWith('.svg') ||
     url.pathname.endsWith('.png') ||
     url.pathname.endsWith('.jpg') ||

@@ -1,18 +1,31 @@
 {
-  "name": "FocusFlow",
+  "name": "FocusFlow — Personal Todo",
   "short_name": "FocusFlow",
   "description": "Minimal dark personal task management workspace",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#141414",
   "theme_color": "#141414",
   "icons": [
     {
-      "src": "/focus1.jpeg",
-      "sizes": "any",
-      "type": "image/jpeg",
-      "purpose": "any maskable"
+      "src": "/icons/focusflow-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/focusflow-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/focusflow-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
