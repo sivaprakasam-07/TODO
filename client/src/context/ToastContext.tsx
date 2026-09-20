@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { generateId } from '../lib/utils';
 
-export type ToastType = 'success' | 'info' | 'error' | 'action';
+export type ToastType = 'success' | 'info' | 'warning' | 'error' | 'action';
 
 export interface ToastAction {
   label: string;
@@ -11,19 +11,26 @@ export interface ToastAction {
 export interface ToastItem {
   id: string;
   message: string;
+  description?: string;
   type: ToastType;
   action?: ToastAction;
   duration?: number;
+  createdAt: number;
+  emoji?: string;
+}
+
+export interface ShowToastOptions {
+  message: string;
+  description?: string;
+  type?: ToastType;
+  action?: ToastAction;
+  duration?: number;
+  emoji?: string;
 }
 
 interface ToastContextType {
   toasts: ToastItem[];
-  showToast: (options: {
-    message: string;
-    type?: ToastType;
-    action?: ToastAction;
-    duration?: number;
-  }) => string;
+  showToast: (options: ShowToastOptions) => string;
   dismissToast: (id: string) => void;
 }
 
@@ -39,29 +46,54 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const showToast = useCallback(
     ({
       message,
+      description,
       type = 'success',
       action,
       duration = 4000,
-    }: {
-      message: string;
-      type?: ToastType;
-      action?: ToastAction;
-      duration?: number;
-    }) => {
-      const id = generateId();
-      const newToast: ToastItem = { id, message, type, action, duration };
+      emoji,
+    }: ShowToastOptions) => {
+      let toastId = '';
 
-      setToasts((prev) => [...prev.slice(-4), newToast]); // keep max 5 toasts
+      setToasts((prev) => {
+        // Prevent duplicate toast spam if an identical message and type is already active
+        const existingIndex = prev.findIndex(
+          (t) => t.message === message && t.type === type
+        );
 
-      if (duration > 0) {
-        setTimeout(() => {
-          dismissToast(id);
-        }, duration);
-      }
+        if (existingIndex !== -1) {
+          toastId = prev[existingIndex].id;
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            description: description ?? updated[existingIndex].description,
+            action: action ?? updated[existingIndex].action,
+            emoji: emoji ?? updated[existingIndex].emoji,
+            duration,
+            createdAt: Date.now(), // Refresh timestamp
+          };
+          return updated;
+        }
 
-      return id;
+        const id = generateId();
+        toastId = id;
+        const newToast: ToastItem = {
+          id,
+          message,
+          description,
+          type,
+          action,
+          duration,
+          createdAt: Date.now(),
+          emoji,
+        };
+
+        // Keep maximum 5 toasts visible simultaneously
+        return [...prev.slice(-4), newToast];
+      });
+
+      return toastId;
     },
-    [dismissToast]
+    []
   );
 
   return (

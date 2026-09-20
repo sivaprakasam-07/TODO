@@ -195,6 +195,16 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       try {
         await updateFirestoreTask(authUser.uid, id, updates);
+        if (updates.status === 'completed') {
+          showToast({ message: 'Task Completed 🎉', type: 'success' });
+        } else if (updates.status) {
+          const statusLabels: Record<Status, string> = {
+            todo: 'Todo',
+            'in-progress': 'In Progress',
+            completed: 'Completed',
+          };
+          showToast({ message: `Moved to ${statusLabels[updates.status]}`, type: 'info' });
+        }
       } catch (err) {
         console.error('[TaskContext] Failed to update task:', err);
         showToast({ message: "Couldn't update task. Please try again.", type: 'error' });
@@ -214,7 +224,11 @@ export const TaskProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           'in-progress': 'In Progress',
           completed: 'Completed',
         };
-        showToast({ message: `Moved to ${statusLabels[newStatus]}`, type: 'info' });
+        if (newStatus === 'completed') {
+          showToast({ message: 'Task Completed 🎉', type: 'success' });
+        } else {
+          showToast({ message: `Moved to ${statusLabels[newStatus]}`, type: 'info' });
+        }
       } catch (err) {
         console.error('[TaskContext] Failed to move task:', err);
         showToast({ message: "Couldn't move task. Please try again.", type: 'error' });
