@@ -34,6 +34,8 @@ export interface CreateTaskInput {
   dueDate?: string;
   tags?: string[];
   order?: number;
+  reminderAt?: string | null;
+  reminderEnabled?: boolean;
 }
 
 interface TaskContextType {

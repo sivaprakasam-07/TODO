@@ -3,13 +3,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Priority, Status } from '../../types/task';
 import { useTasks } from '../../context/TaskContext';
 import { useUI } from '../../context/UIContext';
+import { useAuth } from '../../context/AuthContext';
 import { formatTimestamp } from '../../lib/utils';
-import { X, Trash2, Tag as TagIcon, Plus } from 'lucide-react';
+import { formatReminderDisplay } from '../../lib/dateUtils';
+import { X, Trash2, Tag as TagIcon, Plus, Bell } from 'lucide-react';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import {
+  getNotificationPermission,
+  requestNotificationPermission,
+  NotificationPermissionState,
+} from '../../services/notificationService';
 
 export const TaskDetails: React.FC = () => {
   const { getTaskById, updateTask, deleteTask, tasks } = useTasks();
   const { selectedTaskId, setSelectedTaskId } = useUI();
+  const { user } = useAuth();
   const prefersReduced = useReducedMotion();
 
   const task = selectedTaskId ? getTaskById(selectedTaskId) : undefined;
@@ -18,6 +26,11 @@ export const TaskDetails: React.FC = () => {
   const [description, setDescription] = useState('');
   const [newTag, setNewTag] = useState('');
   const [isAddingTag, setIsAddingTag] = useState(false);
+  const [reminderDateTime, setReminderDateTime] = useState('');
+  const [isEditingReminder, setIsEditingReminder] = useState(false);
+  const [permissionState, setPermissionState] = useState<NotificationPermissionState>(() =>
+    getNotificationPermission()
+  );
 
   // Available tag suggestions from other active tasks
   const availableTags = useMemo(() => {
@@ -35,6 +48,24 @@ export const TaskDetails: React.FC = () => {
       setDescription(task.description || '');
       setNewTag('');
       setIsAddingTag(false);
+      setIsEditingReminder(false);
+      setPermissionState(getNotificationPermission());
+
+      if (task.reminderAt) {
+        const d = new Date(task.reminderAt);
+        if (!isNaN(d.getTime())) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const hh = String(d.getHours()).padStart(2, '0');
+          const mm = String(d.getMinutes()).padStart(2, '0');
+          setReminderDateTime(`${y}-${m}-${day}T${hh}:${mm}`);
+        } else {
+          setReminderDateTime('');
+        }
+      } else {
+        setReminderDateTime('');
+      }
     }
   }, [task]);
 
@@ -85,6 +116,59 @@ export const TaskDetails: React.FC = () => {
     } else {
       updateTask(task.id, { dueDate: undefined });
     }
+  };
+
+  const handleSaveReminder = () => {
+    if (!reminderDateTime) {
+      updateTask(task.id, { reminderAt: null, reminderEnabled: false });
+      setIsEditingReminder(false);
+      return;
+    }
+
+    const parsed = new Date(reminderDateTime).getTime();
+    if (isNaN(parsed)) return;
+
+    updateTask(task.id, {
+      reminderAt: new Date(reminderDateTime).toISOString(),
+      reminderEnabled: true,
+    });
+    setIsEditingReminder(false);
+  };
+
+  const handleClearReminder = () => {
+    updateTask(task.id, { reminderAt: null, reminderEnabled: false });
+    setReminderDateTime('');
+    setIsEditingReminder(false);
+  };
+
+  const setReminderPreset = (preset: '1h' | 'tomorrow9am' | 'tomorrow6pm') => {
+    const target = new Date();
+    if (preset === '1h') {
+      target.setHours(target.getHours() + 1);
+    } else if (preset === 'tomorrow9am') {
+      target.setDate(target.getDate() + 1);
+      target.setHours(9, 0, 0, 0);
+    } else if (preset === 'tomorrow6pm') {
+      target.setDate(target.getDate() + 1);
+      target.setHours(18, 0, 0, 0);
+    }
+    const y = target.getFullYear();
+    const m = String(target.getMonth() + 1).padStart(2, '0');
+    const d = String(target.getDate()).padStart(2, '0');
+    const hh = String(target.getHours()).padStart(2, '0');
+    const mm = String(target.getMinutes()).padStart(2, '0');
+    const formatted = `${y}-${m}-${d}T${hh}:${mm}`;
+    setReminderDateTime(formatted);
+    updateTask(task.id, {
+      reminderAt: new Date(formatted).toISOString(),
+      reminderEnabled: true,
+    });
+    setIsEditingReminder(false);
+  };
+
+  const handleRequestPermission = async () => {
+    const result = await requestNotificationPermission(user?.uid);
+    setPermissionState(result);
   };
 
   const handleAddTag = (tagToAdd?: string) => {
@@ -281,6 +365,112 @@ export const TaskDetails: React.FC = () => {
                       </>
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* Smart Reminder */}
+              <div className="grid grid-cols-3 items-start gap-2 pt-2 border-t border-[#1F1F1F]">
+                <div className="flex items-center gap-1.5 text-[#777777] pt-1.5">
+                  <Bell className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Reminder</span>
+                </div>
+
+                <div className="col-span-2 space-y-2">
+                  {task.reminderEnabled && task.reminderAt && !isEditingReminder ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between bg-[#1B1B1B] border border-amber-500/20 rounded px-2.5 py-1.5 text-xs text-amber-400">
+                        <span className="font-medium truncate">{formatReminderDisplay(task.reminderAt)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingReminder(true)}
+                          className="text-[10px] text-[#A1A1AA] hover:text-[#EDEDED] ml-2 shrink-0 underline cursor-pointer"
+                        >
+                          Change
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={handleClearReminder}
+                          className="text-rose-400/80 hover:text-rose-400 transition-colors cursor-pointer"
+                        >
+                          Remove Reminder
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        type="datetime-local"
+                        value={reminderDateTime}
+                        onChange={(e) => setReminderDateTime(e.target.value)}
+                        className="w-full bg-[#1B1B1B] border border-[#2B2B2B] rounded px-2.5 py-1.5 text-xs text-[#F5F5F5] focus:outline-none"
+                      />
+
+                      <div className="flex items-center justify-between text-[10px]">
+                        <div className="flex items-center gap-1.5 text-[#888888]">
+                          <button
+                            type="button"
+                            onClick={() => setReminderPreset('1h')}
+                            className="hover:text-[#EDEDED] transition-colors cursor-pointer"
+                          >
+                            +1h
+                          </button>
+                          <span className="text-[#444444]">•</span>
+                          <button
+                            type="button"
+                            onClick={() => setReminderPreset('tomorrow9am')}
+                            className="hover:text-[#EDEDED] transition-colors cursor-pointer"
+                          >
+                            Tmrw 9am
+                          </button>
+                          <span className="text-[#444444]">•</span>
+                          <button
+                            type="button"
+                            onClick={() => setReminderPreset('tomorrow6pm')}
+                            className="hover:text-[#EDEDED] transition-colors cursor-pointer"
+                          >
+                            Tmrw 6pm
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {isEditingReminder && (
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingReminder(false)}
+                              className="text-[#71717A] hover:text-[#EDEDED] cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleSaveReminder}
+                            disabled={!reminderDateTime}
+                            className="px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 font-medium transition-colors cursor-pointer disabled:opacity-40"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Device Notification Status */}
+                      {permissionState === 'default' && (
+                        <div className="flex items-center justify-between gap-1 p-2 rounded bg-[#1B1B1B] border border-[#262626] text-[10px] text-[#A1A1AA]">
+                          <span>Enable browser alerts</span>
+                          <button
+                            type="button"
+                            onClick={handleRequestPermission}
+                            className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 cursor-pointer"
+                          >
+                            Enable
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

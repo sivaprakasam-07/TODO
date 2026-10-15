@@ -6,6 +6,7 @@ import { useTasks } from '../../context/TaskContext';
 import { useAuth } from '../../context/AuthContext';
 import { TaskMenu } from './TaskMenu';
 import { formatDueDate, cn } from '../../lib/utils';
+import { formatReminderDisplay } from '../../lib/dateUtils';
 import {
   Calendar,
   Circle,
@@ -15,6 +16,7 @@ import {
   CircleSlash,
   Timer,
   LayoutGrid,
+  Bell,
 } from 'lucide-react';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 
@@ -166,8 +168,8 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onDropOnTask }) => {
             <Timer className="w-3 h-3" />
           </span>
 
-          {/* Due Date Chip */}
-          {task.dueDate && (
+          {/* Due Date Chip (hide overdue indicator on completed tasks) */}
+          {task.dueDate && (!isCompleted || !dueDateInfo.isOverdue) && (
             <span
               className={cn(
                 'inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-[#242424] border border-[#2F2F2F] select-none',
@@ -183,6 +185,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onDropOnTask }) => {
             >
               <Calendar className="w-3 h-3" />
               {dueDateInfo.label && <span className="text-[10px]">{dueDateInfo.label}</span>}
+            </span>
+          )}
+
+          {/* Active Reminder Indicator */}
+          {task.reminderEnabled && task.reminderAt && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-[#242424] border border-amber-500/30 text-amber-400 select-none"
+              title={`Reminder: ${formatReminderDisplay(task.reminderAt)}`}
+            >
+              <Bell className="w-3 h-3 text-amber-400" />
+              <span className="hidden sm:inline text-[10px]">{formatReminderDisplay(task.reminderAt)}</span>
             </span>
           )}
 

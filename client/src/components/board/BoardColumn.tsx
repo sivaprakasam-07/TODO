@@ -5,7 +5,7 @@ import { useTasks } from '../../context/TaskContext';
 import { useUI } from '../../context/UIContext';
 import { TaskCard } from './TaskCard';
 import { SelectTaskModal } from './SelectTaskModal';
-import { Plus, Circle, Clock, CheckCircle2, ArrowUpRight } from 'lucide-react';
+import { Plus, Circle, Clock, CheckCircle2, ArrowUpRight, Sparkles } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface BoardColumnProps {
@@ -14,6 +14,12 @@ interface BoardColumnProps {
   tasks: Task[];
   isSearchActive?: boolean;
 }
+
+const columnMotivationalMessages: Record<Status, string> = {
+  todo: 'Every big thing starts somewhere.',
+  'in-progress': "Keep going. You're getting there.",
+  completed: 'Small steps. Real progress.',
+};
 
 export const BoardColumn: React.FC<BoardColumnProps> = ({
   status,
@@ -172,6 +178,14 @@ export const BoardColumn: React.FC<BoardColumnProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Subtle Motivational Message for Column */}
+      {columnMotivationalMessages[status] && (
+        <div className="shrink-0 flex items-center gap-1.5 text-[12px] text-[#8A8A8A] -mt-1 pb-2.5 select-none">
+          <Sparkles className="w-3 h-3 text-[#8A8A8A]/70 shrink-0" />
+          <span>{columnMotivationalMessages[status]}</span>
+        </div>
+      )}
 
       {/* Top action button */}
       <div className="shrink-0 pb-3">

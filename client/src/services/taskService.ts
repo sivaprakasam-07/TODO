@@ -25,6 +25,8 @@ export interface CreateTaskServiceInput {
   dueDate?: string;
   tags?: string[];
   order?: number;
+  reminderAt?: string | null;
+  reminderEnabled?: boolean;
   createdByName?: string;
   createdByEmail?: string;
   createdByPhotoURL?: string;
@@ -67,6 +69,8 @@ export function parseFirestoreTask(docSnap: QueryDocumentSnapshot<DocumentData>,
     updatedAt: timestampToIso(data.updatedAt),
     completedAt: data.completedAt ? timestampToIso(data.completedAt) : null,
     deletedAt: data.deletedAt ? timestampToIso(data.deletedAt) : null,
+    reminderAt: data.reminderAt ? timestampToIso(data.reminderAt) : null,
+    reminderEnabled: typeof data.reminderEnabled === 'boolean' ? data.reminderEnabled : false,
     createdBy: data.createdBy || undefined,
     createdByUid: data.createdByUid || undefined,
     createdByEmail: data.createdByEmail || undefined,
@@ -120,6 +124,7 @@ export async function createFirestoreTask(
   const initialStatus = input.status || 'todo';
   const columnTasks = existingTasks.filter((t) => t.status === initialStatus && !t.deletedAt);
   const taskOrder = typeof input.order === 'number' ? input.order : columnTasks.length;
+  const reminderEnabled = Boolean(input.reminderEnabled && input.reminderAt);
 
   const taskPayload = {
     taskNumber: nextTaskNumber,
@@ -130,6 +135,8 @@ export async function createFirestoreTask(
     dueDate: input.dueDate || null,
     tags: input.tags || [],
     order: taskOrder,
+    reminderAt: input.reminderAt ? new Date(input.reminderAt) : null,
+    reminderEnabled,
     createdBy: input.createdByName || null,
     createdByUid: uid,
     createdByEmail: input.createdByEmail || null,
@@ -141,6 +148,26 @@ export async function createFirestoreTask(
   };
 
   await setDoc(newDocRef, taskPayload);
+
+  // If reminder is enabled, persist pending reminder record
+  if (reminderEnabled && input.reminderAt) {
+    try {
+      const reminderDocRef = doc(db, 'users', uid, 'reminders', newDocRef.id);
+      await setDoc(reminderDocRef, {
+        taskId: newDocRef.id,
+        uid,
+        taskTitle: input.title.trim(),
+        scheduledAt: new Date(input.reminderAt),
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        attemptCount: 0,
+      });
+    } catch (reminderErr) {
+      console.warn('[TaskService] Failed to schedule reminder record:', reminderErr);
+    }
+  }
+
   return newDocRef.id;
 }
 
@@ -166,6 +193,7 @@ export async function updateFirestoreTask(
     payload.status = updates.status;
     if (updates.status === 'completed') {
       payload.completedAt = serverTimestamp();
+      payload.reminderEnabled = false; // Invalidate active reminder when task completes
     } else {
       payload.completedAt = null;
     }
@@ -174,9 +202,51 @@ export async function updateFirestoreTask(
   if (updates.dueDate !== undefined) payload.dueDate = updates.dueDate || null;
   if (updates.tags !== undefined) payload.tags = updates.tags;
   if (updates.order !== undefined) payload.order = updates.order;
-  if (updates.deletedAt !== undefined) payload.deletedAt = updates.deletedAt;
+  if (updates.reminderAt !== undefined) {
+    payload.reminderAt = updates.reminderAt ? new Date(updates.reminderAt) : null;
+  }
+  if (updates.reminderEnabled !== undefined) {
+    payload.reminderEnabled = updates.reminderEnabled;
+  }
+  if (updates.deletedAt !== undefined) {
+    payload.deletedAt = updates.deletedAt;
+    if (updates.deletedAt !== null) {
+      payload.reminderEnabled = false;
+    }
+  }
 
   await updateDoc(taskDocRef, payload);
+
+  // Synchronize reminder collection
+  try {
+    const reminderDocRef = doc(db, 'users', uid, 'reminders', taskId);
+    if (
+      updates.status === 'completed' ||
+      (updates.deletedAt !== null && updates.deletedAt !== undefined) ||
+      updates.reminderEnabled === false
+    ) {
+      await updateDoc(reminderDocRef, {
+        status: 'cancelled',
+        updatedAt: serverTimestamp(),
+      }).catch(() => {});
+    } else if (updates.reminderEnabled === true && updates.reminderAt) {
+      await setDoc(
+        reminderDocRef,
+        {
+          taskId,
+          uid,
+          taskTitle: updates.title || 'Task Reminder',
+          scheduledAt: new Date(updates.reminderAt),
+          status: 'pending',
+          updatedAt: serverTimestamp(),
+          attemptCount: 0,
+        },
+        { merge: true }
+      );
+    }
+  } catch (err) {
+    console.warn('[TaskService] Reminder sync warning:', err);
+  }
 }
 
 /**
@@ -191,18 +261,35 @@ export async function moveFirestoreTask(
   if (!db) throw new Error('Firestore is not initialized.');
 
   const taskDocRef = doc(db, 'users', uid, 'tasks', taskId);
+  const isCompleted = newStatus === 'completed';
 
   const payload: Record<string, unknown> = {
     status: newStatus,
     updatedAt: serverTimestamp(),
-    completedAt: newStatus === 'completed' ? serverTimestamp() : null,
+    completedAt: isCompleted ? serverTimestamp() : null,
   };
+
+  if (isCompleted) {
+    payload.reminderEnabled = false;
+  }
 
   if (typeof newOrder === 'number') {
     payload.order = newOrder;
   }
 
   await updateDoc(taskDocRef, payload);
+
+  if (isCompleted) {
+    try {
+      const reminderDocRef = doc(db, 'users', uid, 'reminders', taskId);
+      await updateDoc(reminderDocRef, {
+        status: 'cancelled',
+        updatedAt: serverTimestamp(),
+      }).catch(() => {});
+    } catch {
+      // non-blocking
+    }
+  }
 }
 
 /**
@@ -238,7 +325,18 @@ export async function softDeleteFirestoreTask(uid: string, taskId: string): Prom
   await updateDoc(taskDocRef, {
     deletedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    reminderEnabled: false,
   });
+
+  try {
+    const reminderDocRef = doc(db, 'users', uid, 'reminders', taskId);
+    await updateDoc(reminderDocRef, {
+      status: 'cancelled',
+      updatedAt: serverTimestamp(),
+    }).catch(() => {});
+  } catch {
+    // non-blocking
+  }
 }
 
 /**
@@ -267,6 +365,53 @@ export async function permanentlyDeleteFirestoreTask(uid: string, taskId: string
 
   const taskDocRef = doc(db, 'users', uid, 'tasks', taskId);
   await deleteDoc(taskDocRef);
+
+  try {
+    const reminderDocRef = doc(db, 'users', uid, 'reminders', taskId);
+    await deleteDoc(reminderDocRef).catch(() => {});
+  } catch {
+    // non-blocking
+  }
+}
+
+/**
+ * Upserts an individual task reminder record in users/{uid}/reminders/{taskId}.
+ */
+export async function upsertFirestoreTaskReminder(
+  uid: string,
+  taskId: string,
+  taskTitle: string,
+  scheduledAtIso: string
+): Promise<void> {
+  if (!db) throw new Error('Firestore is not initialized.');
+
+  const reminderDocRef = doc(db, 'users', uid, 'reminders', taskId);
+  await setDoc(
+    reminderDocRef,
+    {
+      taskId,
+      uid,
+      taskTitle: taskTitle.trim(),
+      scheduledAt: new Date(scheduledAtIso),
+      status: 'pending',
+      updatedAt: serverTimestamp(),
+      attemptCount: 0,
+    },
+    { merge: true }
+  );
+}
+
+/**
+ * Cancels a pending reminder for a task.
+ */
+export async function cancelFirestoreTaskReminder(uid: string, taskId: string): Promise<void> {
+  if (!db) throw new Error('Firestore is not initialized.');
+
+  const reminderDocRef = doc(db, 'users', uid, 'reminders', taskId);
+  await updateDoc(reminderDocRef, {
+    status: 'cancelled',
+    updatedAt: serverTimestamp(),
+  }).catch(() => {});
 }
 
 /**

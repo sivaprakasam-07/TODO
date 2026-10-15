@@ -3,6 +3,8 @@ import { useTasks } from '../../context/TaskContext';
 import { useUI } from '../../context/UIContext';
 import { Status, Task, SortOption } from '../../types/task';
 import { BoardColumn } from './BoardColumn';
+import { DailyFocusDashboard } from './DailyFocusDashboard';
+import { getLocalDateString, isPastLocalDay, isSameLocalDay } from '../../lib/dateUtils';
 import { ArrowUpDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -45,7 +47,7 @@ function sortTasks(tasks: Task[], option: SortOption): Task[] {
 
 export const Board: React.FC = () => {
   const { tasksByStatus } = useTasks();
-  const { searchQuery, mobileActiveTab, setMobileActiveTab, sortOption, setSortOption } = useUI();
+  const { searchQuery, mobileActiveTab, setMobileActiveTab, sortOption, setSortOption, boardFilter } = useUI();
 
   const columns: { id: Status; title: string }[] = [
     { id: 'todo', title: 'Todo' },
@@ -56,8 +58,9 @@ export const Board: React.FC = () => {
   // In-memory instant client search filter over loaded user tasks + view sorting
   const filteredTasksByStatus = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+    const todayStr = getLocalDateString();
 
-    const filterFn = (task: Task) => {
+    const searchMatch = (task: Task) => {
       if (!q) return true;
       const matchTitle = task.title.toLowerCase().includes(q);
       const matchDesc = task.description?.toLowerCase().includes(q);
@@ -66,17 +69,36 @@ export const Board: React.FC = () => {
       return Boolean(matchTitle || matchDesc || matchNumber || matchTags);
     };
 
-    return {
-      todo: sortTasks(tasksByStatus.todo.filter(filterFn), sortOption),
-      'in-progress': sortTasks(tasksByStatus['in-progress'].filter(filterFn), sortOption),
-      completed: sortTasks(tasksByStatus.completed.filter(filterFn), sortOption),
+    const boardFilterMatch = (task: Task) => {
+      if (boardFilter === 'all') return true;
+      if (boardFilter === 'dueToday') {
+        return task.dueDate === todayStr || (task.completedAt ? isSameLocalDay(task.completedAt, todayStr) : false);
+      }
+      if (boardFilter === 'completedToday') {
+        return Boolean(task.completedAt && isSameLocalDay(task.completedAt, todayStr));
+      }
+      if (boardFilter === 'overdue') {
+        return Boolean(task.status !== 'completed' && task.dueDate && isPastLocalDay(task.dueDate, todayStr));
+      }
+      return true;
     };
-  }, [tasksByStatus, searchQuery, sortOption]);
 
-  const isSearchActive = Boolean(searchQuery.trim());
+    const combinedFilter = (task: Task) => searchMatch(task) && boardFilterMatch(task);
+
+    return {
+      todo: sortTasks(tasksByStatus.todo.filter(combinedFilter), sortOption),
+      'in-progress': sortTasks(tasksByStatus['in-progress'].filter(combinedFilter), sortOption),
+      completed: sortTasks(tasksByStatus.completed.filter(combinedFilter), sortOption),
+    };
+  }, [tasksByStatus, searchQuery, sortOption, boardFilter]);
+
+  const isSearchActive = Boolean(searchQuery.trim() || boardFilter !== 'all');
 
   return (
     <div className="h-full flex flex-col min-h-0 space-y-3">
+      {/* Daily Focus Dashboard - Top of Board */}
+      <DailyFocusDashboard />
+
       {/* Top Bar: Mobile Tabs & Sort Selector */}
       <div className="shrink-0 flex items-center justify-between gap-3">
         {/* Mobile Tab Selector (< 768px) */}

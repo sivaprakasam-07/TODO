@@ -102,3 +102,68 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+
+// ==========================================
+// FocusFlow 2.0 Web Push & Background Reminders
+// ==========================================
+
+self.addEventListener('push', (event) => {
+  let title = 'FocusFlow Reminder';
+  let body = 'You have a scheduled task reminder.';
+  let data = {};
+
+  if (event.data) {
+    try {
+      const payload = event.data.json();
+      if (payload.notification) {
+        title = payload.notification.title || title;
+        body = payload.notification.body || body;
+      } else if (payload.title) {
+        title = payload.title;
+        body = payload.body || body;
+      }
+      data = payload.data || {};
+    } catch {
+      body = event.data.text() || body;
+    }
+  }
+
+  const options = {
+    body,
+    icon: '/icons/focusflow-192.png',
+    badge: '/favicon.png',
+    data,
+    tag: data.taskId || 'focusflow-reminder',
+    renotify: true,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const taskId = event.notification.data?.taskId;
+  const targetUrl = taskId ? `/?taskId=${encodeURIComponent(taskId)}` : '/';
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        // Focus existing open window if available
+        for (const client of clientList) {
+          if (client.url && 'focus' in client) {
+            client.postMessage({
+              type: 'NOTIFICATION_NAVIGATE',
+              taskId: taskId || null,
+            });
+            return client.focus();
+          }
+        }
+        // Open new window on the safe origin
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(targetUrl);
+        }
+      })
+  );
+});

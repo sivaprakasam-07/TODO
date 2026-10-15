@@ -9,9 +9,11 @@ import { TaskDetails } from '../task/TaskDetails';
 import { TaskDialog } from '../task/TaskDialog';
 import { ToastContainer } from '../ui/ToastContainer';
 import { cn } from '../../lib/utils';
+import { useReminderManager } from '../../hooks/useReminderManager';
 
 export const AppLayout: React.FC = () => {
   const { activeView } = useUI();
+  useReminderManager();
 
   const renderActiveView = () => {
     switch (activeView) {

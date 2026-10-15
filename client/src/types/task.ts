@@ -18,10 +18,28 @@ export interface Task {
   updatedAt: string;
   completedAt?: string | null;
   deletedAt?: string | null; // For soft delete / undo / trash
+  reminderAt?: string | null; // ISO timestamp of scheduled reminder
+  reminderEnabled?: boolean;  // Whether reminder is active
   createdBy?: string;        // Creator display name e.g. "Tamil mani Siva Prakasam"
   createdByUid?: string;     // Creator Firebase UID
   createdByEmail?: string;   // Creator Email
   createdByPhotoURL?: string;// Creator Profile Photo
+}
+
+export type ReminderStatus = 'pending' | 'sent' | 'cancelled' | 'failed';
+
+export interface TaskReminder {
+  id: string;
+  taskId: string;
+  uid: string;
+  taskTitle: string;
+  scheduledAt: string; // ISO string
+  status: ReminderStatus;
+  createdAt: string;
+  updatedAt: string;
+  sentAt?: string | null;
+  attemptCount?: number;
+  lastErrorCode?: string | null;
 }
 
 export type ActiveView = 'board' | 'calendar' | 'trash' | 'profile';

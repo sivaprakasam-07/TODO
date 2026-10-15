@@ -3,19 +3,31 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Priority, Status } from '../../types/task';
 import { useTasks } from '../../context/TaskContext';
 import { useUI } from '../../context/UIContext';
-import { X, Loader2, Tag as TagIcon } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { X, Loader2, Tag as TagIcon, Bell, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import {
+  getNotificationPermission,
+  requestNotificationPermission,
+  NotificationPermissionState,
+} from '../../services/notificationService';
 
 export const TaskDialog: React.FC = () => {
   const { createTask, tasks } = useTasks();
   const { isCreateTaskModalOpen, closeCreateTaskModal, createInitialStatus } = useUI();
+  const { user } = useAuth();
   const prefersReduced = useReducedMotion();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority | ''>('');
   const [dueDate, setDueDate] = useState('');
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderDateTime, setReminderDateTime] = useState('');
+  const [permissionState, setPermissionState] = useState<NotificationPermissionState>(() =>
+    getNotificationPermission()
+  );
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,6 +50,9 @@ export const TaskDialog: React.FC = () => {
       setDescription('');
       setPriority('');
       setDueDate('');
+      setReminderEnabled(false);
+      setReminderDateTime('');
+      setPermissionState(getNotificationPermission());
       setTagInput('');
       setTags([]);
       setError('');
@@ -87,6 +102,31 @@ export const TaskDialog: React.FC = () => {
     }
   };
 
+  const setReminderPreset = (preset: '1h' | 'tomorrow9am' | 'tomorrow6pm') => {
+    const target = new Date();
+    if (preset === '1h') {
+      target.setHours(target.getHours() + 1);
+    } else if (preset === 'tomorrow9am') {
+      target.setDate(target.getDate() + 1);
+      target.setHours(9, 0, 0, 0);
+    } else if (preset === 'tomorrow6pm') {
+      target.setDate(target.getDate() + 1);
+      target.setHours(18, 0, 0, 0);
+    }
+    const y = target.getFullYear();
+    const m = String(target.getMonth() + 1).padStart(2, '0');
+    const d = String(target.getDate()).padStart(2, '0');
+    const hh = String(target.getHours()).padStart(2, '0');
+    const mm = String(target.getMinutes()).padStart(2, '0');
+    setReminderDateTime(`${y}-${m}-${d}T${hh}:${mm}`);
+    setReminderEnabled(true);
+  };
+
+  const handleRequestPermission = async () => {
+    const result = await requestNotificationPermission(user?.uid);
+    setPermissionState(result);
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isSubmitting) return;
@@ -96,6 +136,20 @@ export const TaskDialog: React.FC = () => {
       setError('Task title is required');
       inputRef.current?.focus();
       return;
+    }
+
+    let finalReminderAt: string | null = null;
+    if (reminderEnabled && reminderDateTime) {
+      const parsedTime = new Date(reminderDateTime).getTime();
+      if (isNaN(parsedTime)) {
+        setError('Please enter a valid reminder date and time');
+        return;
+      }
+      if (parsedTime <= Date.now()) {
+        setError('Reminder time must be in the future');
+        return;
+      }
+      finalReminderAt = new Date(reminderDateTime).toISOString();
     }
 
     setIsSubmitting(true);
@@ -108,6 +162,8 @@ export const TaskDialog: React.FC = () => {
         priority: (priority as Priority) || undefined,
         dueDate: dueDate || undefined,
         tags,
+        reminderAt: finalReminderAt,
+        reminderEnabled: Boolean(finalReminderAt && reminderEnabled),
       });
 
       closeCreateTaskModal();
@@ -276,6 +332,101 @@ export const TaskDialog: React.FC = () => {
                     className="w-full bg-[#161616] text-xs text-[#E0E0E0] border border-[#262626] focus:border-[#444444] rounded-md px-2.5 py-1.5 focus:outline-none"
                   />
                 </div>
+              </div>
+
+              {/* Smart Reminder Section (Independent of Due Date) */}
+              <div className="bg-[#151515] border border-[#242424] rounded-lg p-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs text-[#E0E0E0] font-medium">
+                    <Bell className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Smart Reminder</span>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-[11px] text-[#888888]">
+                      {reminderEnabled ? 'Enabled' : 'Off'}
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={reminderEnabled}
+                      onChange={(e) => setReminderEnabled(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-amber-400 rounded cursor-pointer"
+                    />
+                  </label>
+                </div>
+
+                {reminderEnabled && (
+                  <div className="space-y-2 pt-1 border-t border-[#202020]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-[#777777]">Reminder time</span>
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setReminderPreset('1h')}
+                          className="text-[#888888] hover:text-[#EDEDED] transition-colors cursor-pointer"
+                        >
+                          +1h
+                        </button>
+                        <span className="text-[#444444]">•</span>
+                        <button
+                          type="button"
+                          onClick={() => setReminderPreset('tomorrow9am')}
+                          className="text-[#888888] hover:text-[#EDEDED] transition-colors cursor-pointer"
+                        >
+                          Tmrw 9am
+                        </button>
+                        <span className="text-[#444444]">•</span>
+                        <button
+                          type="button"
+                          onClick={() => setReminderPreset('tomorrow6pm')}
+                          className="text-[#888888] hover:text-[#EDEDED] transition-colors cursor-pointer"
+                        >
+                          Tmrw 6pm
+                        </button>
+                      </div>
+                    </div>
+
+                    <input
+                      type="datetime-local"
+                      value={reminderDateTime}
+                      onChange={(e) => setReminderDateTime(e.target.value)}
+                      className="w-full bg-[#1A1A1A] text-xs text-[#E0E0E0] border border-[#2B2B2B] focus:border-[#444444] rounded-md px-2.5 py-1.5 focus:outline-none"
+                    />
+
+                    {/* Browser Notification Permission Status Banner */}
+                    <div className="pt-1">
+                      {permissionState === 'default' && (
+                        <div className="flex items-center justify-between gap-2 p-2 rounded bg-[#1A1A1A] border border-[#2B2B2B] text-[11px] text-[#999999]">
+                          <span>Enable browser alerts on this device</span>
+                          <button
+                            type="button"
+                            onClick={handleRequestPermission}
+                            className="px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-medium transition-colors cursor-pointer"
+                          >
+                            Enable
+                          </button>
+                        </div>
+                      )}
+                      {permissionState === 'granted' && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Device push notifications enabled</span>
+                        </div>
+                      )}
+                      {permissionState === 'denied' && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-rose-400">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          <span>Notifications blocked in browser settings. Please allow notifications.</span>
+                        </div>
+                      )}
+                      {permissionState === 'unsupported' && (
+                        <div className="text-[10px] text-[#777777]">
+                          In-app reminder alerts active (browser push unsupported).
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Tags Section */}

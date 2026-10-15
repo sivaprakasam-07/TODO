@@ -18,6 +18,8 @@ interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
 }
 
+export type BoardFilter = 'all' | 'dueToday' | 'completedToday' | 'overdue';
+
 interface UIContextType {
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
@@ -33,6 +35,8 @@ interface UIContextType {
   setMobileActiveTab: (tab: Status) => void;
   sortOption: SortOption;
   setSortOption: (option: SortOption) => void;
+  boardFilter: BoardFilter;
+  setBoardFilter: (filter: BoardFilter) => void;
   isOnline: boolean;
   isInstallable: boolean;
   triggerInstall: () => Promise<void>;
@@ -48,6 +52,7 @@ export const UIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [mobileActiveTab, setMobileActiveTab] = useState<Status>('todo');
   const [sortOption, setSortOption] = useState<SortOption>('manual');
+  const [boardFilter, setBoardFilter] = useState<BoardFilter>('all');
   const [isOnline, setIsOnline] = useState<boolean>(
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
@@ -112,6 +117,8 @@ export const UIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         setMobileActiveTab,
         sortOption,
         setSortOption,
+        boardFilter,
+        setBoardFilter,
         isOnline,
         isInstallable: Boolean(deferredPrompt),
         triggerInstall,
